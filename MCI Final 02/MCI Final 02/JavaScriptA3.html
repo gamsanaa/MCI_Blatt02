@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Complex Stimulus Reaction Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            margin-top: 40px;
+        }
+        img {
+            max-width: 400px;
+            max-height: 300px;
+        }
+    </style>
+</head>
+<body>
+<h1>Food Identification Task</h1>
+<h2>Press D for German, F for Chinese, G for Mexican food. Press "a" for results.</h2>
+<div id="image-container"></div>
+<p id="trial-count"></p>
+<p id="results"></p>
+
+<script>
+    const germanImages = Array.from({length: 10}, (_, i) => ({src: `img/germany/germany${i+1}.jpg`, label: 'germany'}));
+    const chineseImages = Array.from({length: 10}, (_, i) => ({src: `img/china/china${i+1}.jpg`, label: 'china'}));
+    const mexicanImages = Array.from({length: 10}, (_, i) => ({src: `img/mexcico/mexcico${i+1}.jpg`, label: 'mexico'}));
+
+    const allImages = [...germanImages, ...chineseImages, ...mexicanImages];
+
+    const shuffle = arr => arr.sort(() => Math.random() - 0.5);
+    const trials = shuffle(allImages);
+
+    const times = { germany: [], china: [], mexico: [] };
+    const errors = { germany: 0, china: 0, mexico: 0 };
+
+    let trialIndex = 0;
+    let currentTrial = null;
+    let startTime = 0;
+    let experimentActive = true;
+
+    const container = document.getElementById('image-container');
+    const trialCount = document.getElementById('trial-count');
+    const resultBox = document.getElementById('results');
+
+    function showImage() {
+        if (!experimentActive || trialIndex >= trials.length) {
+            showResults();
+            return;
+        }
+
+        currentTrial = trials[trialIndex];
+        container.innerHTML = `<img src="${currentTrial.src}" alt="food">`;
+        trialCount.textContent = `Trial: ${trialIndex + 1} / ${trials.length}`;
+        startTime = Date.now();
+    }
+
+    function handleResponse(key) {
+        if (!experimentActive || !currentTrial) return;
+
+        const timeTaken = Date.now() - startTime;
+        const correctKey = {
+            germany: 'KeyD',
+            china: 'KeyF',
+            mexico: 'KeyG'
+        };
+
+        if (key === correctKey[currentTrial.label]) {
+            times[currentTrial.label].push(timeTaken);
+        } else {
+            errors[currentTrial.label]++;
+        }
+
+        trialIndex++;
+        currentTrial = null;
+        setTimeout(showImage, 500);
+    }
+
+    function getMean(data) {
+        return data.reduce((a, b) => a + b, 0) / data.length || 0;
+    }
+
+    function getSD(data) {
+        const mean = getMean(data);
+        const variance = data.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / data.length || 0;
+        return Math.sqrt(variance);
+    }
+
+    function showResults() {
+        experimentActive = false;
+        container.innerHTML = '';
+        trialCount.textContent = 'Experiment finished.';
+        resultBox.innerHTML = `
+        <h3>Results</h3>
+        <b>German Food:</b><br>
+        Mean: ${Math.round(getMean(times.germany))} ms<br>
+        SD: ${Math.round(getSD(times.germany))} ms<br>
+        Errors: ${errors.germany}<br><br>
+
+        <b>Chinese Food:</b><br>
+        Mean: ${Math.round(getMean(times.china))} ms<br>
+        SD: ${Math.round(getSD(times.china))} ms<br>
+        Errors: ${errors.china}<br><br>
+
+        <b>Mexican Food:</b><br>
+        Mean: ${Math.round(getMean(times.mexico))} ms<br>
+        SD: ${Math.round(getSD(times.mexico))} ms<br>
+        Errors: ${errors.mexico}
+      `;
+    }
+
+    window.addEventListener('keydown', e => {
+        if (!experimentActive) return;
+
+        if (['KeyD', 'KeyF', 'KeyG'].includes(e.code)) {
+            handleResponse(e.code);
+        } else if (e.code === 'KeyA') {
+            showResults();
+        }
+    });
+
+    showImage();
+</script>
+
+</body>
+</html>

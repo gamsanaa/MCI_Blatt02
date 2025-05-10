@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Decision Reaction Time Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        #stimulus {
+            margin: 50px auto;
+            width: 0;
+            height: 0;
+        }
+        #error {
+            color: red;
+            font-size: 24px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<h1>Decision Reaction Time Test</h1>
+<h2 id="instruction">Press SPACE when you see a SQUARE (purple or orange)!</h2>
+<div id="stimulus"></div>
+<p id="trial">Trial: 0 / 30</p>
+<p id="result"></p>
+<p id="error"></p>
+
+<script>
+    const COLORS = ["purple", "orange"];
+    const SHAPES = ["square", "triangle"];
+    const MAX_TRIALS = 30;
+
+    let trialCount = 0;
+    let waitingForResponse = false;
+    let stimulusShown = false;
+    let stimulusTimestamp = 0;
+    let currentStimulus = {};
+    let earlyPresses = 0;
+    let triangleErrors = 0;
+    let experimentAborted = false;
+
+    const times = { purple: [], orange: [] };
+
+    const stimulusDiv = document.getElementById("stimulus");
+    const instruction = document.getElementById("instruction");
+    const result = document.getElementById("result");
+    const trialDisplay = document.getElementById("trial");
+    const errorDisplay = document.getElementById("error");
+
+    function getRandom(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
+    function getMean(data) {
+        if (data.length === 0) return 0;
+        return data.reduce((a, b) => a + b, 0) / data.length;
+    }
+
+    function getSD(data) {
+        const mean = getMean(data);
+        const sqDiffs = data.map(v => (v - mean) ** 2);
+        return Math.sqrt(getMean(sqDiffs));
+    }
+
+    function showStimulus() {
+        if (experimentAborted) return;
+
+        const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+        const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+        const size = getRandom(100, 300);
+        currentStimulus = { shape, color, size };
+
+        // Reset styles
+        stimulusDiv.style.border = "none";
+        stimulusDiv.style.borderLeft = "0";
+        stimulusDiv.style.borderRight = "0";
+        stimulusDiv.style.borderTop = "0";
+        stimulusDiv.style.borderBottom = "0";
+        stimulusDiv.style.backgroundColor = "transparent";
+        errorDisplay.textContent = "";
+
+        if (shape === "square") {
+            stimulusDiv.style.width = size + "px";
+            stimulusDiv.style.height = size + "px";
+            stimulusDiv.style.backgroundColor = color;
+        } else {
+            stimulusDiv.style.width = "0";
+            stimulusDiv.style.height = "0";
+            stimulusDiv.style.borderLeft = size / 2 + "px solid transparent";
+            stimulusDiv.style.borderRight = size / 2 + "px solid transparent";
+            stimulusDiv.style.borderBottom = size + "px solid " + color;
+        }
+
+        stimulusShown = true;
+        waitingForResponse = shape === "square";
+        stimulusTimestamp = Date.now();
+
+        if (shape === "triangle") {
+            setTimeout(() => {
+                if (stimulusShown && !experimentAborted) {
+                    hideStimulus();
+                    trialCount++;
+                    nextTrial();
+                }
+            }, getRandom(1000, 4000));
+        }
+    }
+
+    function hideStimulus() {
+        stimulusDiv.style.width = "0";
+        stimulusDiv.style.height = "0";
+        stimulusDiv.style.border = "none";
+        stimulusDiv.style.backgroundColor = "transparent";
+        stimulusShown = false;
+        waitingForResponse = false;
+    }
+
+    function nextTrial() {
+        if (experimentAborted || trialCount >= MAX_TRIALS) {
+            showResults();
+            return;
+        }
+
+        trialDisplay.textContent = `Trial: ${trialCount + 1} / ${MAX_TRIALS}`;
+        const pause = getRandom(2000, 6000);
+
+        setTimeout(() => {
+            if (!experimentAborted) {
+                showStimulus();
+            }
+        }, pause);
+    }
+
+    function handleResponse() {
+        if (!stimulusShown) {
+            earlyPresses++;
+            return;
+        }
+
+        if (!waitingForResponse) {
+            triangleErrors++;
+            errorDisplay.textContent = "Error! Pressed SPACE during a triangle!";
+            return;
+        }
+
+        const rt = Date.now() - stimulusTimestamp;
+
+        if (currentStimulus.shape === "square") {
+            times[currentStimulus.color].push(rt);
+        } else {
+            triangleErrors++;
+            errorDisplay.textContent = "Error! Pressed SPACE during a triangle!";
+        }
+
+        hideStimulus();
+        trialCount++;
+        nextTrial();
+    }
+
+    function showResults() {
+        instruction.textContent = "Experiment finished.";
+        hideStimulus();
+        result.innerHTML = `
+            <b>Results:</b><br>
+            Early key presses (errors): ${earlyPresses}<br>
+            Triangle errors: ${triangleErrors}<br><br>
+
+            <b>Purple squares:</b><br>
+            Mean: ${Math.round(getMean(times.purple))} ms<br>
+            SD: ${Math.round(getSD(times.purple))} ms<br>
+            Count: ${times.purple.length}<br><br>
+
+            <b>Orange squares:</b><br>
+            Mean: ${Math.round(getMean(times.orange))} ms<br>
+            SD: ${Math.round(getSD(times.orange))} ms<br>
+            Count: ${times.orange.length}
+        `;
+    }
+
+    // Start experiment
+    instruction.textContent = "Press SPACE when you see a SQUARE!";
+    nextTrial();
+
+    window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") {
+            handleResponse();
+        } else if (e.code === "KeyA") {
+            experimentAborted = true;
+            hideStimulus();
+            showResults();
+        }
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Reaction Test</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background-color: white;
+            color: black;
+            overflow: hidden;
+        }
+
+        #stimulus {
+            width: 100px;
+            height: 40px;
+            position: absolute;
+            background-color: white;
+        }
+    </style>
+</head>
+<body>
+<h1 id="title">User Study</h1>
+<h2 id="instruction">Press space to start!</h2>
+<div id="stimulus"></div>
+<p id="time"></p>
+<p id="count"></p>
+<p id="mean"></p>
+<p id="sd"></p>
+<p id="correlation"></p>
+
+<script>
+    let experimentActive = false;
+    let stimulusIsVisible = false;
+    let stimulusTimestamp = null;
+    let transitionInterval = null;
+    let testStimulusTimeout;
+    let times = [];
+    let distances = [];
+    let errors = 0;
+    let trialCount = 0;
+    const maxTrials = 30;
+
+    const stimulusElement = document.getElementById("stimulus");
+    const instructionElement = document.getElementById("instruction");
+    const timeElement = document.getElementById("time");
+    const countElement = document.getElementById("count");
+    const meanElement = document.getElementById("mean");
+    const stdDevElement = document.getElementById("sd");
+    const correlationElement = document.getElementById("correlation");
+
+    function getMean(arr) {
+        return arr.reduce((sum, val) => sum + val, 0) / arr.length;
+    }
+
+    function getStandardDeviation(arr) {
+        const mean = getMean(arr);
+        const sqDiffs = arr.map(v => (v - mean) ** 2);
+        return Math.sqrt(getMean(sqDiffs));
+    }
+
+    function getCorrelation(x, y) {
+        const meanX = getMean(x);
+        const meanY = getMean(y);
+        let numerator = 0, denomX = 0, denomY = 0;
+        for (let i = 0; i < x.length; i++) {
+            const dx = x[i] - meanX;
+            const dy = y[i] - meanY;
+            numerator += dx * dy;
+            denomX += dx * dx;
+            denomY += dy * dy;
+        }
+        return numerator / Math.sqrt(denomX * denomY);
+    }
+
+    function clearResults() {
+        timeElement.textContent = '';
+        countElement.textContent = '';
+        meanElement.textContent = '';
+        stdDevElement.textContent = '';
+        correlationElement.textContent = '';
+    }
+
+    function showResults() {
+        if (times.length === 0) return;
+        const mean = getMean(times);
+        const sd = getStandardDeviation(times);
+        const errorRate = (errors / (times.length + errors)) * 100;
+        const corr = distances.length === times.length ? getCorrelation(distances, times) : null;
+
+        countElement.textContent = `Trials: ${times.length} | Errors: ${errors}`;
+        meanElement.textContent = `Mean: ${Math.round(mean)} ms`;
+        stdDevElement.textContent = `Standard Deviation: ${Math.round(sd)} ms | Error Rate: ${errorRate.toFixed(2)}%`;
+        correlationElement.textContent = `Correlation (Distance ↔ Reaction Time): ${corr !== null ? corr.toFixed(3) : 'n/a'}`;
+    }
+
+    function startStimulusTransition(x, y) {
+        // Abstand zum Bildschirmzentrum berechnen
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+        const dist = Math.hypot(x + 50 - centerX, y + 20 - centerY);
+        distances.push(dist);
+
+        stimulusIsVisible = true;
+        let startTime = Date.now();
+        const duration = 3000;
+
+        transitionInterval = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const greenBlue = Math.floor(255 * (1 - progress));
+            stimulusElement.style.backgroundColor = `rgb(255, ${greenBlue}, ${greenBlue})`;
+
+            if (!stimulusTimestamp && progress > 0.05) {
+                stimulusTimestamp = Date.now();
+            }
+
+            if (progress >= 1) {
+                clearInterval(transitionInterval);
+            }
+        }, 30);
+    }
+
+    function showStimulus() {
+        if (!experimentActive || trialCount >= maxTrials) {
+            stopExperiment();
+            return;
+        }
+
+        const x = Math.random() * (window.innerWidth - 100);
+        const y = Math.random() * (window.innerHeight - 40);
+        stimulusElement.style.left = `${x}px`;
+        stimulusElement.style.top = `${y}px`;
+        stimulusElement.style.backgroundColor = "white";
+        stimulusTimestamp = null;
+        stimulusIsVisible = false;
+
+        startStimulusTransition(x, y);
+    }
+
+    function startNextTrial() {
+        const delay = Math.random() * 4 + 2;
+        testStimulusTimeout = setTimeout(() => {
+            trialCount++;
+            showStimulus();
+        }, delay * 1000);
+    }
+
+    function handleCorrectReaction() {
+        if (!stimulusTimestamp) return; // Sicherheitsabfrage
+        const rt = Date.now() - stimulusTimestamp;
+        times.push(rt);
+        timeElement.textContent = `Reaction Time: ${rt} ms`;
+
+        stimulusIsVisible = false;
+        stimulusTimestamp = null;
+        stimulusElement.style.backgroundColor = "white";
+
+        clearInterval(transitionInterval);
+
+        startNextTrial(); // Neue Runde starten
+    }
+
+    function startExperiment() {
+        clearResults();
+        instructionElement.textContent = "Press SPACE when the rectangle turns red! Press 'a' for results!";
+        experimentActive = true;
+        times = [];
+        distances = [];
+        errors = 0;
+        trialCount = 0;
+        startNextTrial();
+    }
+
+    function stopExperiment() {
+        clearTimeout(testStimulusTimeout);
+        clearInterval(transitionInterval);
+        experimentActive = false;
+        stimulusIsVisible = false;
+        stimulusElement.style.backgroundColor = "white";
+        instructionElement.textContent = "Press space to start!";
+        showResults();
+    }
+
+    window.addEventListener("keydown", event => {
+        if (event.key === " ") {
+            if (!experimentActive) {
+                startExperiment();
+            } else if (stimulusIsVisible && stimulusTimestamp) {
+                handleCorrectReaction();
+            } else {
+                errors++;
+                console.log("False reaction recorded.");
+            }
+        } else if (event.key === "a") {
+            if (experimentActive) stopExperiment();
+        }
+    });
+</script>
+</body>
+</html>
